@@ -90,6 +90,10 @@ You must set the DSN url in production.
 
 The following details how to deploy this application.
 
+### Kubernetes (DigitalOcean)
+
+For deploying to DigitalOcean Kubernetes, see the detailed [Kubernetes Deployment Guide](k8s/DEPLOYMENT.md).
+
 ### Docker
 
 See detailed [cookiecutter-django Docker documentation](https://cookiecutter-django.readthedocs.io/en/latest/3-deployment/deployment-with-docker.html).
