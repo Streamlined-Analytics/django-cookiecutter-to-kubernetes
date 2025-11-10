@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: C:\Users\ben_1\AppData\Local\Microsoft\WinGet\Packages\Kubernetes.kompose_Microsoft.Winget.Source_8wekyb3d8bbwe\kompose.exe convert -f docker-compose.production.yml
+    kompose.version: 1.37.0 (fb0539e64)
+  labels:
+    io.kompose.service: postgres
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: C:\Users\ben_1\AppData\Local\Microsoft\WinGet\Packages\Kubernetes.kompose_Microsoft.Winget.Source_8wekyb3d8bbwe\kompose.exe convert -f docker-compose.production.yml
+        kompose.version: 1.37.0 (fb0539e64)
+      labels:
+        io.kompose.service: postgres
+    spec:
+      containers:
+        - envFrom:
+            - configMapRef:
+                name: envs--production--postgres
+          image: kubernetes_test_v2_production_postgres
+          name: postgres
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: production-postgres-data
+            - mountPath: /backups
+              name: production-postgres-data-backups
+      restartPolicy: Always
+      volumes:
+        - name: production-postgres-data
+          persistentVolumeClaim:
+            claimName: production-postgres-data
+        - name: production-postgres-data-backups
+          persistentVolumeClaim:
+            claimName: production-postgres-data-backups

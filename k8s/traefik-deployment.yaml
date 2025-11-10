@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: C:\Users\ben_1\AppData\Local\Microsoft\WinGet\Packages\Kubernetes.kompose_Microsoft.Winget.Source_8wekyb3d8bbwe\kompose.exe convert -f docker-compose.production.yml
+    kompose.version: 1.37.0 (fb0539e64)
+  labels:
+    io.kompose.service: traefik
+  name: traefik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: traefik
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: C:\Users\ben_1\AppData\Local\Microsoft\WinGet\Packages\Kubernetes.kompose_Microsoft.Winget.Source_8wekyb3d8bbwe\kompose.exe convert -f docker-compose.production.yml
+        kompose.version: 1.37.0 (fb0539e64)
+      labels:
+        io.kompose.service: traefik
+    spec:
+      containers:
+        - image: kubernetes_test_v2_production_traefik
+          name: traefik
+          ports:
+            - containerPort: 80
+              protocol: TCP
+            - containerPort: 443
+              protocol: TCP
+            - containerPort: 5555
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /etc/traefik/acme
+              name: production-traefik
+      restartPolicy: Always
+      volumes:
+        - name: production-traefik
+          persistentVolumeClaim:
+            claimName: production-traefik
