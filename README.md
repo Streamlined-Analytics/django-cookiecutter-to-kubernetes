@@ -92,7 +92,19 @@ The following details how to deploy this application.
 
 ### Kubernetes (DigitalOcean)
 
-For deploying to DigitalOcean Kubernetes, see the detailed [Kubernetes Deployment Guide](k8s/DEPLOYMENT.md).
+Two deployment options are available:
+
+1. **[Kubernetes Deployment Guide](k8s/DEPLOYMENT.md)** - Basic deployment with self-hosted database
+   - Uses Kubernetes-managed PostgreSQL and Redis
+   - Suitable for development and testing
+   - Note: Has ReadWriteOnce volume limitations for media files
+
+2. **[Managed Services Deployment Guide](k8s/DEPLOYMENT-MANAGED.md)** - Recommended for production
+   - Uses DigitalOcean Managed PostgreSQL Database
+   - Uses DigitalOcean Spaces (S3-compatible) for media files
+   - Uses DigitalOcean Load Balancer
+   - Better scalability, reliability, and managed backups
+   - No volume access conflicts
 
 ### Docker
 

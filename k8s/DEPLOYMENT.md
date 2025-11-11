@@ -450,16 +450,37 @@ spec:
 
 ## Deploy to Kubernetes
 
+### Important Note: Media Files Storage Limitation
+
+**⚠️ ReadWriteOnce Volume Limitation:**
+
+DigitalOcean Block Storage volumes use `ReadWriteOnce` access mode, which means they can only be mounted by pods on a single node at a time. This creates a conflict for the `production-django-media` volume, which needs to be accessed by both Django (for uploads) and Nginx (for serving files).
+
+**Recommended Solutions:**
+
+1. **Use DigitalOcean Spaces (S3-compatible object storage)** - Recommended for production
+   - Configure Django to use `django-storages` with DigitalOcean Spaces
+   - No volume conflicts, better scalability, CDN support
+   - See the [Managed Services Deployment Guide](DEPLOYMENT-MANAGED.md) for complete setup
+
+2. **Deploy Nginx as a sidecar container** - Alternative approach
+   - Run Nginx in the same pod as Django
+   - Both containers share the same volume mount
+   - Requires modifying `django-deployment.yaml` to include Nginx container
+
+For this guide, we'll proceed with the basic volume setup, but note that you may encounter pod scheduling issues if Django and Nginx pods are scheduled on different nodes. For production, we strongly recommend using DigitalOcean Spaces or the managed services approach.
+
 ### 1. Apply Persistent Volume Claims
 
 Create persistent storage for your data:
 
 ```bash
-kubectl apply -f k8s/production-django-media-persistentvolumeclaim.yaml
 kubectl apply -f k8s/production-postgres-data-persistentvolumeclaim.yaml
 kubectl apply -f k8s/production-postgres-data-backups-persistentvolumeclaim.yaml
 kubectl apply -f k8s/production-redis-data-persistentvolumeclaim.yaml
 kubectl apply -f k8s/production-traefik-persistentvolumeclaim.yaml
+# Note: production-django-media PVC has ReadWriteOnce limitations - see note above
+kubectl apply -f k8s/production-django-media-persistentvolumeclaim.yaml
 ```
 
 ### 2. Apply ConfigMaps
