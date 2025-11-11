@@ -370,7 +370,7 @@ kubectl create secret generic django-secrets ^
 
 Edit the ConfigMap files to set your configuration:
 
-**Edit `envs--production--django-configmap.yaml`:**
+**Edit `k8s/envs--production--django-configmap.yaml`:**
 
 ```yaml
 apiVersion: v1
@@ -386,6 +386,8 @@ data:
   REDIS_URL: "redis://redis:6379/0"
   WEB_CONCURRENCY: "4"
   CELERY_FLOWER_USER: "admin"  # Change this
+  # DATABASE_URL is required - format: postgres://USER:PASSWORD@HOST:PORT/DATABASE
+  DATABASE_URL: "postgres://YOUR_POSTGRES_USER:YOUR_POSTGRES_PASSWORD@postgres:5432/kubernetes_test_v2"
   # Optional: Configure email (Mailgun example)
   # MAILGUN_API_KEY: "your-mailgun-api-key"
   # MAILGUN_DOMAIN: "your-mailgun-domain"
@@ -394,7 +396,7 @@ data:
   # SENTRY_DSN: "your-sentry-dsn"
 ```
 
-**Edit `envs--production--postgres-configmap.yaml`:**
+**Edit `k8s/envs--production--postgres-configmap.yaml`:**
 
 ```yaml
 apiVersion: v1
@@ -406,6 +408,8 @@ data:
   POSTGRES_PORT: "5432"
   POSTGRES_DB: kubernetes_test_v2
   POSTGRES_USER: postgres
+  # PGDATA is required to avoid conflicts with the mount point's lost+found directory
+  PGDATA: /var/lib/postgresql/data/pgdata
 ```
 
 **Note**: The actual passwords will come from the secrets created above.
@@ -451,18 +455,18 @@ spec:
 Create persistent storage for your data:
 
 ```bash
-kubectl apply -f production-django-media-persistentvolumeclaim.yaml
-kubectl apply -f production-postgres-data-persistentvolumeclaim.yaml
-kubectl apply -f production-postgres-data-backups-persistentvolumeclaim.yaml
-kubectl apply -f production-redis-data-persistentvolumeclaim.yaml
-kubectl apply -f production-traefik-persistentvolumeclaim.yaml
+kubectl apply -f k8s/production-django-media-persistentvolumeclaim.yaml
+kubectl apply -f k8s/production-postgres-data-persistentvolumeclaim.yaml
+kubectl apply -f k8s/production-postgres-data-backups-persistentvolumeclaim.yaml
+kubectl apply -f k8s/production-redis-data-persistentvolumeclaim.yaml
+kubectl apply -f k8s/production-traefik-persistentvolumeclaim.yaml
 ```
 
 ### 2. Apply ConfigMaps
 
 ```bash
-kubectl apply -f envs--production--django-configmap.yaml
-kubectl apply -f envs--production--postgres-configmap.yaml
+kubectl apply -f k8s/envs--production--django-configmap.yaml
+kubectl apply -f k8s/envs--production--postgres-configmap.yaml
 ```
 
 ### 3. Deploy Database and Redis
@@ -470,8 +474,8 @@ kubectl apply -f envs--production--postgres-configmap.yaml
 Deploy PostgreSQL and Redis first:
 
 ```bash
-kubectl apply -f postgres-deployment.yaml
-kubectl apply -f redis-deployment.yaml
+kubectl apply -f k8s/postgres-deployment.yaml
+kubectl apply -f k8s/redis-deployment.yaml
 ```
 
 Wait for these to be ready:
@@ -488,7 +492,7 @@ Before deploying the Django app, run migrations:
 **Linux/macOS:**
 ```bash
 # First deploy Django temporarily to run migrations
-kubectl apply -f django-deployment.yaml
+kubectl apply -f k8s/django-deployment.yaml
 
 # Wait for Django pod to be ready
 kubectl wait --for=condition=ready --timeout=300s pod -l io.kompose.service=django
@@ -509,7 +513,7 @@ kubectl exec -it ${DJANGO_POD} -- python manage.py collectstatic --noinput
 **Windows (PowerShell):**
 ```powershell
 # First deploy Django temporarily to run migrations
-kubectl apply -f django-deployment.yaml
+kubectl apply -f k8s/django-deployment.yaml
 
 # Wait for Django pod to be ready
 kubectl wait --for=condition=ready --timeout=300s pod -l io.kompose.service=django
@@ -530,7 +534,7 @@ kubectl exec -it $DJANGO_POD -- python manage.py collectstatic --noinput
 **Windows (Command Prompt):**
 ```cmd
 REM First deploy Django temporarily to run migrations
-kubectl apply -f django-deployment.yaml
+kubectl apply -f k8s/django-deployment.yaml
 
 REM Wait for Django pod to be ready
 kubectl wait --for=condition=ready --timeout=300s pod -l io.kompose.service=django
@@ -553,12 +557,12 @@ kubectl exec -it POD_NAME -- python manage.py collectstatic --noinput
 Deploy the remaining services:
 
 ```bash
-kubectl apply -f nginx-deployment.yaml
-kubectl apply -f celeryworker-deployment.yaml
-kubectl apply -f celerybeat-deployment.yaml
-kubectl apply -f flower-deployment.yaml
-kubectl apply -f traefik-deployment.yaml
-kubectl apply -f traefik-service.yaml
+kubectl apply -f k8s/nginx-deployment.yaml
+kubectl apply -f k8s/celeryworker-deployment.yaml
+kubectl apply -f k8s/celerybeat-deployment.yaml
+kubectl apply -f k8s/flower-deployment.yaml
+kubectl apply -f k8s/traefik-deployment.yaml
+kubectl apply -f k8s/traefik-service.yaml
 ```
 
 ### 6. Expose Your Application
@@ -591,7 +595,7 @@ spec:
 
 Apply it:
 ```bash
-kubectl apply -f traefik-loadbalancer.yaml
+kubectl apply -f k8s/traefik-loadbalancer.yaml
 ```
 
 ## Verify Deployment
@@ -674,7 +678,7 @@ DJANGO_SECURE_SSL_REDIRECT: "True"
 
 Then reapply:
 ```bash
-kubectl apply -f envs--production--django-configmap.yaml
+kubectl apply -f k8s/envs--production--django-configmap.yaml
 kubectl rollout restart deployment/django
 ```
 
@@ -757,8 +761,8 @@ kubectl delete deployment postgres
 kubectl delete pvc production-postgres-data
 
 # Recreate PVC and deployment
-kubectl apply -f production-postgres-data-persistentvolumeclaim.yaml
-kubectl apply -f postgres-deployment.yaml
+kubectl apply -f k8s/production-postgres-data-persistentvolumeclaim.yaml
+kubectl apply -f k8s/postgres-deployment.yaml
 
 # Re-run migrations
 ```
@@ -804,7 +808,7 @@ After making code changes:
 2. Update deployment files with new tag
 3. Apply changes:
    ```bash
-   kubectl apply -f django-deployment.yaml
+   kubectl apply -f k8s/django-deployment.yaml
    ```
 
 Or use rolling update:
@@ -830,7 +834,7 @@ To remove everything from your cluster:
 
 ```bash
 # Delete all deployments
-kubectl delete -f .
+kubectl delete -f k8s/
 
 # Delete secrets
 kubectl delete secret postgres-secrets django-secrets
