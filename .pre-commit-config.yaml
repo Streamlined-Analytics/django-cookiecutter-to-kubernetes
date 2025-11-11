@@ -14,7 +14,8 @@ repos:
       - id: check-json
       - id: check-toml
       - id: check-xml
-      - id: check-yaml
+# doesn't allow service/deployment in same file for k8s
+#      - id: check-yaml
       - id: debug-statements
       - id: check-builtin-literals
       - id: check-case-conflict
