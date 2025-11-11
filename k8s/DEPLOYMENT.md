@@ -2,6 +2,15 @@
 
 This guide provides step-by-step instructions for deploying the Django application to a DigitalOcean Kubernetes cluster using the manifests in this directory.
 
+**Platform Support**: This guide includes instructions for Windows (PowerShell and Command Prompt), Linux, and macOS.
+
+**Registry Requirements**: This deployment uses **4 container repositories** and works with DigitalOcean's Basic Container Registry plan (which includes 5 repositories). The deployment consolidates images efficiently:
+- **Django image**: Shared by Django app, Celery worker, Celery beat, and Flower
+- **Postgres image**: PostgreSQL database
+- **Nginx image**: Static file server
+- **Traefik image**: Reverse proxy
+- **Redis**: Uses public Docker Hub image (doesn't count toward your registry limit)
+
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
@@ -131,65 +140,158 @@ doctl kubernetes cluster registry add django-k8s-cluster
 
 ## Build and Push Docker Images
 
+**Note on Registry Requirements**: This deployment uses **4 container repositories** (Django, Postgres, Nginx, Traefik). The Django image is shared across multiple services (Django app, Celery worker, Celery beat, and Flower). This fits comfortably within DigitalOcean's Basic registry plan (5 repositories). Redis uses the public Docker Hub image and doesn't count toward your limit.
+
 ### 1. Set Your Registry URL
 
+**Linux/macOS:**
 ```bash
 export REGISTRY_URL="registry.digitalocean.com/django-registry"
 ```
 
+**Windows (PowerShell):**
+```powershell
+$env:REGISTRY_URL="registry.digitalocean.com/django-registry"
+```
+
+**Windows (Command Prompt):**
+```cmd
+set REGISTRY_URL=registry.digitalocean.com/django-registry
+```
+
 ### 2. Build Docker Images
 
-Navigate to the project root and build all production images:
+Navigate to the project root and build all production images.
 
+**Linux/macOS:**
 ```bash
-# Build Django image
-docker build -f compose/production/django/Dockerfile -t ${REGISTRY_URL}/kubernetes_test_v2_production_django:latest .
+# Build Django image (used by django, celeryworker, celerybeat, and flower)
+docker build -f compose/production/django/Dockerfile -t ${REGISTRY_URL}/django:latest .
 
 # Build Postgres image
-docker build -f compose/production/postgres/Dockerfile -t ${REGISTRY_URL}/kubernetes_test_v2_production_postgres:latest .
+docker build -f compose/production/postgres/Dockerfile -t ${REGISTRY_URL}/postgres:latest .
 
 # Build Traefik image
-docker build -f compose/production/traefik/Dockerfile -t ${REGISTRY_URL}/kubernetes_test_v2_production_traefik:latest .
+docker build -f compose/production/traefik/Dockerfile -t ${REGISTRY_URL}/traefik:latest .
 
 # Build Nginx image
-docker build -f compose/production/nginx/Dockerfile -t ${REGISTRY_URL}/kubernetes_test_v2_production_nginx:latest .
+docker build -f compose/production/nginx/Dockerfile -t ${REGISTRY_URL}/nginx:latest .
+```
 
-# Celery services use the same Django image, so tag them
-docker tag ${REGISTRY_URL}/kubernetes_test_v2_production_django:latest ${REGISTRY_URL}/kubernetes_test_v2_production_celeryworker:latest
-docker tag ${REGISTRY_URL}/kubernetes_test_v2_production_django:latest ${REGISTRY_URL}/kubernetes_test_v2_production_celerybeat:latest
-docker tag ${REGISTRY_URL}/kubernetes_test_v2_production_django:latest ${REGISTRY_URL}/kubernetes_test_v2_production_flower:latest
+**Windows (PowerShell):**
+```powershell
+# Build Django image (used by django, celeryworker, celerybeat, and flower)
+docker build -f compose/production/django/Dockerfile -t "$env:REGISTRY_URL/django:latest" .
+
+# Build Postgres image
+docker build -f compose/production/postgres/Dockerfile -t "$env:REGISTRY_URL/postgres:latest" .
+
+# Build Traefik image
+docker build -f compose/production/traefik/Dockerfile -t "$env:REGISTRY_URL/traefik:latest" .
+
+# Build Nginx image
+docker build -f compose/production/nginx/Dockerfile -t "$env:REGISTRY_URL/nginx:latest" .
+```
+
+**Windows (Command Prompt):**
+```cmd
+# Build Django image (used by django, celeryworker, celerybeat, and flower)
+docker build -f compose/production/django/Dockerfile -t %REGISTRY_URL%/django:latest .
+
+# Build Postgres image
+docker build -f compose/production/postgres/Dockerfile -t %REGISTRY_URL%/postgres:latest .
+
+# Build Traefik image
+docker build -f compose/production/traefik/Dockerfile -t %REGISTRY_URL%/traefik:latest .
+
+# Build Nginx image
+docker build -f compose/production/nginx/Dockerfile -t %REGISTRY_URL%/nginx:latest .
 ```
 
 ### 3. Push Images to Registry
 
+**Linux/macOS:**
 ```bash
-docker push ${REGISTRY_URL}/kubernetes_test_v2_production_django:latest
-docker push ${REGISTRY_URL}/kubernetes_test_v2_production_postgres:latest
-docker push ${REGISTRY_URL}/kubernetes_test_v2_production_traefik:latest
-docker push ${REGISTRY_URL}/kubernetes_test_v2_production_nginx:latest
-docker push ${REGISTRY_URL}/kubernetes_test_v2_production_celeryworker:latest
-docker push ${REGISTRY_URL}/kubernetes_test_v2_production_celerybeat:latest
-docker push ${REGISTRY_URL}/kubernetes_test_v2_production_flower:latest
+docker push ${REGISTRY_URL}/django:latest
+docker push ${REGISTRY_URL}/postgres:latest
+docker push ${REGISTRY_URL}/traefik:latest
+docker push ${REGISTRY_URL}/nginx:latest
 ```
+
+**Windows (PowerShell):**
+```powershell
+docker push "$env:REGISTRY_URL/django:latest"
+docker push "$env:REGISTRY_URL/postgres:latest"
+docker push "$env:REGISTRY_URL/traefik:latest"
+docker push "$env:REGISTRY_URL/nginx:latest"
+```
+
+**Windows (Command Prompt):**
+```cmd
+docker push %REGISTRY_URL%/django:latest
+docker push %REGISTRY_URL%/postgres:latest
+docker push %REGISTRY_URL%/traefik:latest
+docker push %REGISTRY_URL%/nginx:latest
+```
+
+**Total repositories used: 4** (Django, Postgres, Traefik, Nginx)
+- The Django image is reused for: django, celeryworker, celerybeat, and flower services
+- Redis uses the public image `docker.io/redis:7.2` (doesn't count toward your registry limit)
 
 ### 4. Update Kubernetes Manifests
 
-Update the image references in your deployment files to use your registry URL. You need to update these files:
+Update the image references in your deployment files to use your registry URL and the consolidated image names.
 
-- `django-deployment.yaml`
-- `postgres-deployment.yaml`
-- `traefik-deployment.yaml`
-- `nginx-deployment.yaml`
-- `celeryworker-deployment.yaml`
-- `celerybeat-deployment.yaml`
-- `flower-deployment.yaml`
+You need to update these files:
+- `django-deployment.yaml` → use `registry.digitalocean.com/django-registry/django:latest`
+- `postgres-deployment.yaml` → use `registry.digitalocean.com/django-registry/postgres:latest`
+- `traefik-deployment.yaml` → use `registry.digitalocean.com/django-registry/traefik:latest`
+- `nginx-deployment.yaml` → use `registry.digitalocean.com/django-registry/nginx:latest`
+- `celeryworker-deployment.yaml` → use `registry.digitalocean.com/django-registry/django:latest`
+- `celerybeat-deployment.yaml` → use `registry.digitalocean.com/django-registry/django:latest`
+- `flower-deployment.yaml` → use `registry.digitalocean.com/django-registry/django:latest`
 
-Replace `image: kubernetes_test_v2_production_*` with `image: registry.digitalocean.com/django-registry/kubernetes_test_v2_production_*:latest`
-
-**Example using sed:**
+**Linux/macOS (using sed):**
 ```bash
 cd k8s
-sed -i 's|image: kubernetes_test_v2_production_|image: registry.digitalocean.com/django-registry/kubernetes_test_v2_production_|g' *-deployment.yaml
+
+# Update Django-based services
+sed -i 's|image: kubernetes_test_v2_production_django|image: registry.digitalocean.com/django-registry/django:latest|g' django-deployment.yaml
+sed -i 's|image: kubernetes_test_v2_production_celeryworker|image: registry.digitalocean.com/django-registry/django:latest|g' celeryworker-deployment.yaml
+sed -i 's|image: kubernetes_test_v2_production_celerybeat|image: registry.digitalocean.com/django-registry/django:latest|g' celerybeat-deployment.yaml
+sed -i 's|image: kubernetes_test_v2_production_flower|image: registry.digitalocean.com/django-registry/django:latest|g' flower-deployment.yaml
+
+# Update other services
+sed -i 's|image: kubernetes_test_v2_production_postgres|image: registry.digitalocean.com/django-registry/postgres:latest|g' postgres-deployment.yaml
+sed -i 's|image: kubernetes_test_v2_production_traefik|image: registry.digitalocean.com/django-registry/traefik:latest|g' traefik-deployment.yaml
+sed -i 's|image: kubernetes_test_v2_production_nginx|image: registry.digitalocean.com/django-registry/nginx:latest|g' nginx-deployment.yaml
+```
+
+**Windows (PowerShell):**
+```powershell
+cd k8s
+
+# Update Django-based services
+(Get-Content django-deployment.yaml) -replace 'image: kubernetes_test_v2_production_django', 'image: registry.digitalocean.com/django-registry/django:latest' | Set-Content django-deployment.yaml
+(Get-Content celeryworker-deployment.yaml) -replace 'image: kubernetes_test_v2_production_celeryworker', 'image: registry.digitalocean.com/django-registry/django:latest' | Set-Content celeryworker-deployment.yaml
+(Get-Content celerybeat-deployment.yaml) -replace 'image: kubernetes_test_v2_production_celerybeat', 'image: registry.digitalocean.com/django-registry/django:latest' | Set-Content celerybeat-deployment.yaml
+(Get-Content flower-deployment.yaml) -replace 'image: kubernetes_test_v2_production_flower', 'image: registry.digitalocean.com/django-registry/django:latest' | Set-Content flower-deployment.yaml
+
+# Update other services
+(Get-Content postgres-deployment.yaml) -replace 'image: kubernetes_test_v2_production_postgres', 'image: registry.digitalocean.com/django-registry/postgres:latest' | Set-Content postgres-deployment.yaml
+(Get-Content traefik-deployment.yaml) -replace 'image: kubernetes_test_v2_production_traefik', 'image: registry.digitalocean.com/django-registry/traefik:latest' | Set-Content traefik-deployment.yaml
+(Get-Content nginx-deployment.yaml) -replace 'image: kubernetes_test_v2_production_nginx', 'image: registry.digitalocean.com/django-registry/nginx:latest' | Set-Content nginx-deployment.yaml
+```
+
+**Manual Update:**
+If you prefer to edit manually, open each file and update the `image:` line. For example:
+
+```yaml
+# Before
+image: kubernetes_test_v2_production_django
+
+# After
+image: registry.digitalocean.com/django-registry/django:latest
 ```
 
 ## Configure Environment Variables
@@ -198,6 +300,7 @@ sed -i 's|image: kubernetes_test_v2_production_|image: registry.digitalocean.com
 
 Instead of using ConfigMaps for sensitive data, create Kubernetes Secrets:
 
+**Linux/macOS:**
 ```bash
 # Generate secure passwords and keys
 export POSTGRES_PASSWORD=$(openssl rand -base64 32)
@@ -217,6 +320,51 @@ kubectl create secret generic django-secrets \
   --from-literal=DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY} \
   --from-literal=CELERY_FLOWER_PASSWORD=${CELERY_FLOWER_PASSWORD}
 ```
+
+**Windows (PowerShell):**
+```powershell
+# Generate secure passwords and keys
+$env:POSTGRES_PASSWORD = (openssl rand -base64 32)
+$env:DJANGO_SECRET_KEY = (openssl rand -base64 64)
+$env:CELERY_FLOWER_PASSWORD = (openssl rand -base64 32)
+
+# Create PostgreSQL secret
+kubectl create secret generic postgres-secrets `
+  --from-literal=POSTGRES_DB=kubernetes_test_v2 `
+  --from-literal=POSTGRES_USER=postgres `
+  --from-literal=POSTGRES_PASSWORD=$env:POSTGRES_PASSWORD `
+  --from-literal=POSTGRES_HOST=postgres `
+  --from-literal=POSTGRES_PORT=5432
+
+# Create Django secret
+kubectl create secret generic django-secrets `
+  --from-literal=DJANGO_SECRET_KEY=$env:DJANGO_SECRET_KEY `
+  --from-literal=CELERY_FLOWER_PASSWORD=$env:CELERY_FLOWER_PASSWORD
+```
+
+**Windows (Command Prompt):**
+```cmd
+REM Generate secure passwords manually or use PowerShell
+REM For Command Prompt, you can generate passwords separately and use them directly:
+
+REM Create PostgreSQL secret (replace YOUR_PASSWORD with actual values)
+kubectl create secret generic postgres-secrets ^
+  --from-literal=POSTGRES_DB=kubernetes_test_v2 ^
+  --from-literal=POSTGRES_USER=postgres ^
+  --from-literal=POSTGRES_PASSWORD=YOUR_POSTGRES_PASSWORD ^
+  --from-literal=POSTGRES_HOST=postgres ^
+  --from-literal=POSTGRES_PORT=5432
+
+REM Create Django secret (replace YOUR_SECRET_KEY and YOUR_PASSWORD with actual values)
+kubectl create secret generic django-secrets ^
+  --from-literal=DJANGO_SECRET_KEY=YOUR_DJANGO_SECRET_KEY ^
+  --from-literal=CELERY_FLOWER_PASSWORD=YOUR_CELERY_FLOWER_PASSWORD
+```
+
+**Note for Windows users**: OpenSSL is included with Git for Windows. If you don't have it, you can:
+- Install Git for Windows: https://git-scm.com/download/win
+- Or use PowerShell which supports the commands above
+- Or generate secure random strings using an online generator (ensure it's secure)
 
 ### 2. Update ConfigMaps
 
@@ -337,10 +485,8 @@ kubectl wait --for=condition=available --timeout=300s deployment/redis
 
 Before deploying the Django app, run migrations:
 
+**Linux/macOS:**
 ```bash
-# Get the postgres pod name
-POSTGRES_POD=$(kubectl get pod -l io.kompose.service=postgres -o jsonpath="{.items[0].metadata.name}")
-
 # First deploy Django temporarily to run migrations
 kubectl apply -f django-deployment.yaml
 
@@ -358,6 +504,48 @@ kubectl exec -it ${DJANGO_POD} -- python manage.py createsuperuser
 
 # Collect static files
 kubectl exec -it ${DJANGO_POD} -- python manage.py collectstatic --noinput
+```
+
+**Windows (PowerShell):**
+```powershell
+# First deploy Django temporarily to run migrations
+kubectl apply -f django-deployment.yaml
+
+# Wait for Django pod to be ready
+kubectl wait --for=condition=ready --timeout=300s pod -l io.kompose.service=django
+
+# Get Django pod name
+$DJANGO_POD = kubectl get pod -l io.kompose.service=django -o jsonpath="{.items[0].metadata.name}"
+
+# Run migrations
+kubectl exec -it $DJANGO_POD -- python manage.py migrate
+
+# Create superuser (interactive)
+kubectl exec -it $DJANGO_POD -- python manage.py createsuperuser
+
+# Collect static files
+kubectl exec -it $DJANGO_POD -- python manage.py collectstatic --noinput
+```
+
+**Windows (Command Prompt):**
+```cmd
+REM First deploy Django temporarily to run migrations
+kubectl apply -f django-deployment.yaml
+
+REM Wait for Django pod to be ready
+kubectl wait --for=condition=ready --timeout=300s pod -l io.kompose.service=django
+
+REM Get Django pod name and run commands (replace POD_NAME with the actual pod name from the first command)
+kubectl get pod -l io.kompose.service=django -o jsonpath="{.items[0].metadata.name}"
+
+REM Run migrations (replace POD_NAME with the name from above)
+kubectl exec -it POD_NAME -- python manage.py migrate
+
+REM Create superuser (interactive)
+kubectl exec -it POD_NAME -- python manage.py createsuperuser
+
+REM Collect static files
+kubectl exec -it POD_NAME -- python manage.py collectstatic --noinput
 ```
 
 ### 5. Deploy All Services
