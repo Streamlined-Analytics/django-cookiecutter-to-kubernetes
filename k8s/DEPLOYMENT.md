@@ -582,6 +582,13 @@ kubectl apply -f k8s/nginx-deployment.yaml
 kubectl apply -f k8s/celeryworker-deployment.yaml
 kubectl apply -f k8s/celerybeat-deployment.yaml
 kubectl apply -f k8s/flower-deployment.yaml
+
+# Create Kubernetes Services for Traefik to route traffic
+kubectl apply -f k8s/django-service.yaml
+kubectl apply -f k8s/flower-service.yaml
+kubectl apply -f k8s/nginx-service.yaml
+
+# Deploy Traefik
 kubectl apply -f k8s/traefik-deployment.yaml
 kubectl apply -f k8s/traefik-service.yaml
 ```
@@ -590,8 +597,19 @@ kubectl apply -f k8s/traefik-service.yaml
 
 Create a LoadBalancer service to expose Traefik:
 
+**Linux/macOS:**
 ```bash
 kubectl patch service traefik -p '{"spec": {"type": "LoadBalancer"}}'
+```
+
+**Windows (PowerShell):**
+```powershell
+kubectl patch service traefik -p '{\"spec\": {\"type\": \"LoadBalancer\"}}'
+```
+
+**Windows (Command Prompt):**
+```cmd
+kubectl patch service traefik -p "{\"spec\": {\"type\": \"LoadBalancer\"}}"
 ```
 
 Or create a new service file `traefik-loadbalancer.yaml`:

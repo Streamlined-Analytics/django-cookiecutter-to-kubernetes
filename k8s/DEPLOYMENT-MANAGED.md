@@ -508,7 +508,20 @@ kubectl apply -f k8s/celerybeat-deployment.yaml
 kubectl apply -f k8s/flower-deployment.yaml
 ```
 
-### 6. Deploy Traefik (Load Balancer)
+### 6. Create Kubernetes Services
+
+**Important**: Traefik needs Kubernetes Services to route traffic to the pods. Create services for Django and Flower:
+
+```bash
+kubectl apply -f k8s/django-service.yaml
+kubectl apply -f k8s/flower-service.yaml
+# Note: nginx-service.yaml is only needed if you're using Nginx for media files
+# kubectl apply -f k8s/nginx-service.yaml
+```
+
+These services allow Traefik to discover and route traffic to your application pods.
+
+### 7. Deploy Traefik (Load Balancer)
 
 ```bash
 kubectl apply -f k8s/traefik-deployment.yaml
@@ -521,8 +534,19 @@ kubectl apply -f k8s/traefik-service.yaml
 
 Patch the Traefik service to use LoadBalancer type:
 
+**Linux/macOS:**
 ```bash
 kubectl patch service traefik -p '{"spec": {"type": "LoadBalancer"}}'
+```
+
+**Windows (PowerShell):**
+```powershell
+kubectl patch service traefik -p '{\"spec\": {\"type\": \"LoadBalancer\"}}'
+```
+
+**Windows (Command Prompt):**
+```cmd
+kubectl patch service traefik -p "{\"spec\": {\"type\": \"LoadBalancer\"}}"
 ```
 
 This will automatically provision a DigitalOcean Load Balancer.
@@ -689,6 +713,63 @@ kubectl apply -f k8s/django-deployment.yaml
 ```
 
 ## Troubleshooting
+
+### Bad Gateway (502) Errors
+
+If you're getting "Bad Gateway" errors when accessing your domain:
+
+**1. Check that Kubernetes Services exist:**
+```bash
+kubectl get services
+```
+
+You should see services for: `django`, `flower`, `traefik`, and `redis`.
+
+**Missing Services?** Apply them:
+```bash
+kubectl apply -f k8s/django-service.yaml
+kubectl apply -f k8s/flower-service.yaml
+```
+
+**2. Verify Traefik can reach Django:**
+```bash
+# Get Traefik pod
+TRAEFIK_POD=$(kubectl get pod -l io.kompose.service=traefik -o jsonpath="{.items[0].metadata.name}")
+
+# Check if Django service resolves
+kubectl exec -it ${TRAEFIK_POD} -- nslookup django
+
+# Test connection to Django
+kubectl exec -it ${TRAEFIK_POD} -- wget -O- http://django:5000 2>&1 | head
+```
+
+**3. Check Django is listening on port 5000:**
+```bash
+DJANGO_POD=$(kubectl get pod -l io.kompose.service=django -o jsonpath="{.items[0].metadata.name}")
+kubectl exec -it ${DJANGO_POD} -- netstat -tlnp | grep 5000
+```
+
+**4. Verify Traefik configuration:**
+```bash
+kubectl logs deployment/traefik | grep -i error
+```
+
+**5. Check ALLOWED_HOSTS:**
+Ensure your domain is in ALLOWED_HOSTS. Update ConfigMap:
+```yaml
+DJANGO_ALLOWED_HOSTS: ".yourdomain.com"  # or "*" for testing
+```
+
+Then restart Django:
+```bash
+kubectl rollout restart deployment/django
+```
+
+**6. Check Traefik routing rules:**
+The Traefik configuration expects:
+- Django service at `http://django:5000`
+- Flower service at `http://flower:5555`
+- These must match your Kubernetes Service definitions
 
 ### Database Connection Issues
 
