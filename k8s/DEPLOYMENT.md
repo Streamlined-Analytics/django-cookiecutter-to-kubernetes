@@ -142,7 +142,43 @@ doctl kubernetes cluster registry add django-k8s-cluster
 
 **Note on Registry Requirements**: This deployment uses **4 container repositories** (Django, Postgres, Nginx, Traefik). The Django image is shared across multiple services (Django app, Celery worker, Celery beat, and Flower). This fits comfortably within DigitalOcean's Basic registry plan (5 repositories). Redis uses the public Docker Hub image and doesn't count toward your limit.
 
-### 1. Set Your Registry URL
+### 1. Update Traefik Configuration
+
+**IMPORTANT**: Before building images, update the Traefik configuration with your actual domain name.
+
+**Edit `compose/production/traefik/traefik.yml`:**
+
+Replace all instances of `example.com` with your actual domain:
+
+```yaml
+# Line 34: Update the main web router
+rule: 'Host(`yourdomain.com`) || Host(`www.yourdomain.com`)'
+
+# Line 45: Update the flower router  
+rule: 'Host(`yourdomain.com`)'
+
+# Line 54: Update the media router
+rule: '(Host(`yourdomain.com`) || Host(`www.yourdomain.com`)) && PathPrefix(`/media/`)'
+
+# Line 25: Update the email for Let's Encrypt certificates
+email: 'your-email@yourdomain.com'
+```
+
+**Quick sed command (Linux/macOS):**
+```bash
+sed -i 's/example\.com/yourdomain.com/g' compose/production/traefik/traefik.yml
+sed -i 's/ben@streamlinedanalytics\.co\.uk/your-email@yourdomain.com/g' compose/production/traefik/traefik.yml
+```
+
+**Windows (PowerShell):**
+```powershell
+(Get-Content compose/production/traefik/traefik.yml) -replace 'example\.com', 'yourdomain.com' | Set-Content compose/production/traefik/traefik.yml
+(Get-Content compose/production/traefik/traefik.yml) -replace 'ben@streamlinedanalytics\.co\.uk', 'your-email@yourdomain.com' | Set-Content compose/production/traefik/traefik.yml
+```
+
+**Why this is required:** Traefik uses these Host rules to route incoming requests. If the Host header doesn't match, Traefik returns a 404 error.
+
+### 2. Set Your Registry URL
 
 **Linux/macOS:**
 ```bash
@@ -159,7 +195,7 @@ $env:REGISTRY_URL="registry.digitalocean.com/django-registry"
 set REGISTRY_URL=registry.digitalocean.com/django-registry
 ```
 
-### 2. Build Docker Images
+### 3. Build Docker Images
 
 Navigate to the project root and build all production images.
 
@@ -208,7 +244,7 @@ docker build -f compose/production/traefik/Dockerfile -t %REGISTRY_URL%/traefik:
 docker build -f compose/production/nginx/Dockerfile -t %REGISTRY_URL%/nginx:latest .
 ```
 
-### 3. Push Images to Registry
+### 4. Push Images to Registry
 
 **Linux/macOS:**
 ```bash
@@ -238,7 +274,7 @@ docker push %REGISTRY_URL%/nginx:latest
 - The Django image is reused for: django, celeryworker, celerybeat, and flower services
 - Redis uses the public image `docker.io/redis:7.2` (doesn't count toward your registry limit)
 
-### 4. Update Kubernetes Manifests
+### 5. Update Kubernetes Manifests
 
 Update the image references in your deployment files to use your registry URL and the consolidated image names.
 

@@ -213,7 +213,44 @@ doctl kubernetes cluster registry add django-k8s-cluster
 
 Follow the same build and push process from the main [DEPLOYMENT.md](DEPLOYMENT.md#build-and-push-docker-images) guide, but you'll also need to install the `django-storages` package for Spaces integration.
 
-### 1. Update Django Requirements
+### 1. Update Traefik Configuration
+
+**IMPORTANT**: Before building images, update the Traefik configuration with your actual domain name.
+
+**Edit `compose/production/traefik/traefik.yml`:**
+
+Replace all instances of `example.com` with your actual domain:
+
+```yaml
+# Line 34: Update the main web router
+rule: 'Host(`yourdomain.com`) || Host(`www.yourdomain.com`)'
+
+# Line 45: Update the flower router
+rule: 'Host(`yourdomain.com`)'
+
+# Line 54: Update the media router
+rule: '(Host(`yourdomain.com`) || Host(`www.yourdomain.com`)) && PathPrefix(`/media/`)'
+
+# Line 25: Update the email for Let's Encrypt certificates
+email: 'your-email@yourdomain.com'
+```
+
+**Quick sed command (Linux/macOS):**
+```bash
+# Replace example.com with your domain
+sed -i 's/example\.com/yourdomain.com/g' compose/production/traefik/traefik.yml
+sed -i 's/ben@streamlinedanalytics\.co\.uk/your-email@yourdomain.com/g' compose/production/traefik/traefik.yml
+```
+
+**Windows (PowerShell):**
+```powershell
+(Get-Content compose/production/traefik/traefik.yml) -replace 'example\.com', 'yourdomain.com' | Set-Content compose/production/traefik/traefik.yml
+(Get-Content compose/production/traefik/traefik.yml) -replace 'ben@streamlinedanalytics\.co\.uk', 'your-email@yourdomain.com' | Set-Content compose/production/traefik/traefik.yml
+```
+
+**Why this is required:** Traefik uses these Host rules to route incoming requests. If the Host header doesn't match, Traefik returns a 404 error.
+
+### 2. Update Django Requirements
 
 Before building, add `django-storages` and `boto3` to your requirements:
 
@@ -224,7 +261,7 @@ django-storages[s3]==1.14.2
 boto3==1.34.17
 ```
 
-### 2. Build and Push Images
+### 3. Build and Push Images
 
 **Linux/macOS:**
 ```bash
@@ -258,7 +295,7 @@ docker build -f compose/production/traefik/Dockerfile -t "$env:REGISTRY_URL/trae
 docker push "$env:REGISTRY_URL/traefik:latest"
 ```
 
-### 3. Update Deployment Manifests
+### 4. Update Deployment Manifests
 
 Update the image references in your deployment files to use your registry URL:
 
@@ -770,6 +807,71 @@ The Traefik configuration expects:
 - Django service at `http://django:5000`
 - Flower service at `http://flower:5555`
 - These must match your Kubernetes Service definitions
+
+### 404 Not Found Errors
+
+If you're getting 404 errors when accessing your domain:
+
+**Root Cause:** Traefik's Host routing rules don't match your domain.
+
+**1. Verify Traefik configuration has your domain:**
+
+Check if the Traefik image was built with your domain:
+
+```bash
+# Get Traefik pod
+TRAEFIK_POD=$(kubectl get pod -l io.kompose.service=traefik -o jsonpath="{.items[0].metadata.name}")
+
+# Check the configuration
+kubectl exec -it ${TRAEFIK_POD} -- cat /etc/traefik/traefik.yml | grep "Host("
+```
+
+You should see your actual domain, not `example.com`:
+```yaml
+rule: 'Host(`yourdomain.com`) || Host(`www.yourdomain.com`)'
+```
+
+**2. If you see `example.com`, you need to rebuild Traefik:**
+
+Edit `compose/production/traefik/traefik.yml` and replace all `example.com` with your domain:
+
+**Linux/macOS:**
+```bash
+sed -i 's/example\.com/yourdomain.com/g' compose/production/traefik/traefik.yml
+sed -i 's/ben@streamlinedanalytics\.co\.uk/your-email@yourdomain.com/g' compose/production/traefik/traefik.yml
+
+# Rebuild and push Traefik image
+docker build -f compose/production/traefik/Dockerfile -t registry.digitalocean.com/django-registry/traefik:latest .
+docker push registry.digitalocean.com/django-registry/traefik:latest
+
+# Restart Traefik deployment to pull new image
+kubectl rollout restart deployment/traefik
+```
+
+**Windows (PowerShell):**
+```powershell
+(Get-Content compose/production/traefik/traefik.yml) -replace 'example\.com', 'yourdomain.com' | Set-Content compose/production/traefik/traefik.yml
+(Get-Content compose/production/traefik/traefik.yml) -replace 'ben@streamlinedanalytics\.co\.uk', 'your-email@yourdomain.com' | Set-Content compose/production/traefik/traefik.yml
+
+docker build -f compose/production/traefik/Dockerfile -t registry.digitalocean.com/django-registry/traefik:latest .
+docker push registry.digitalocean.com/django-registry/traefik:latest
+
+kubectl rollout restart deployment/traefik
+```
+
+**3. Verify DNS is correctly configured:**
+```bash
+# Check what domain resolves to your Load Balancer IP
+nslookup yourdomain.com
+
+# Should match Load Balancer IP
+kubectl get service traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+```
+
+**4. Check Traefik logs for routing info:**
+```bash
+kubectl logs deployment/traefik | grep -i "router\|rule"
+```
 
 ### Database Connection Issues
 
